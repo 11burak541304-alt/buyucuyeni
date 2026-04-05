@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aetheria: 3D Tarayıcı RPG</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap');
+    
+    :root {
+      --primary: #00e5ff;
+      --enemy: #ff3366;
+      --bg: #0b0c10;
+      --glass: rgba(15, 20, 30, 0.6);
+      --glass-border: rgba(255, 255, 255, 0.1);
+    }
+    
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      user-select: none;
+    }
+
+    #gameCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      z-index: 1;
+    }
+
+    #floating-text-container {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .float-text {
+      position: absolute;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      pointer-events: none;
+      text-shadow: 0px 4px 10px rgba(0,0,0,0.8);
+      transform: translate(-50%, -50%);
+    }
+
+    #ui-layer {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 30px;
+      box-sizing: border-box;
+      z-index: 10;
+    }
+
+    .glass-panel {
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 15px 25px;
+      box-shadow: 0 8px 32px 0 rgba(0,0,0,0.3);
+    }
+
+    .header-info {
+      display: flex;
+      justify-content: flex-end;
+      align-items: flex-start;
+    }
+
+    .stats {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 14px;
+      font-weight: 500;
+      min-width: 120px;
+      padding: 10px 20px;
+      opacity: 0.85;
+    }
+
+    .stat-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .score-val { color: #00e5ff; font-weight: 700; text-shadow: 0 0 5px rgba(251, 191, 36, 0.6); }
+    .health-val { color: #ff3366; font-weight: 700; text-shadow: 0 0 10px rgba(255, 51, 102, 0.6); }
+
+    .health-bar-container {
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      margin-top: 5px;
+      overflow: hidden;
+    }
+
+    #xp-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #b500ff;
+      box-shadow: 0 0 5px #b500ff;
+      transition: width 0.2s ease-out;
+    }
+
+    #health-bar-fill {
+      height: 100%;
+      width: 100%;
+      background: #ff3366;
+      box-shadow: 0 0 10px #ff3366;
+      transition: width 0.2s ease-out;
+    }
+
+    .game-over {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      display: none;
+      z-index: 20;
+      pointer-events: auto;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .game-over h2 { font-size: 56px; margin: 0; color: #ff3366; text-shadow: 0 0 20px rgba(255, 51, 102, 0.5); }
+    .game-over p { font-size: 24px; margin: 0; opacity: 0.9; }
+
+    .restart-btn {
+      background: linear-gradient(45deg, #00e5ff, #8a2be2);
+      border: none; color: white; padding: 14px 32px;
+      font-family: 'Outfit', sans-serif; font-size: 18px; font-weight: 700;
+      border-radius: 8px; cursor: pointer; transition: all 0.3s;
+      box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+    }
+
+    .restart-btn:hover { transform: scale(1.05) translateY(-2px); box-shadow: 0 5px 25px rgba(0, 229, 255, 0.6); }
+
+    #inventory-bar {
+      display: flex; gap: 15px; margin-top: auto; align-self: center; margin-bottom: 10px; pointer-events: auto;
+    }
+
+    .inv-slot {
+      width: 60px; height: 60px; border-radius: 12px; display: flex; justify-content: center; align-items: center;
+      position: relative; font-weight: 700; transition: transform 0.2s; cursor: pointer;
+    }
+    
+    .inv-slot:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0, 229, 255, 0.4); }
+    .slot-icon { font-size: 32px; }
+    
+    .slot-count {
+      position: absolute; bottom: -5px; right: -5px; background: #ff3366; color: white;
+      font-size: 14px; padding: 2px 6px; border-radius: 10px; border: 2px solid var(--bg);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="floating-text-container"></div>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="ui-layer">
+    <div class="header-info" style="justify-content: flex-end;">
+      <div class="glass-panel stats">
+        <div class="stat-box"><span>Level</span><span id="levelVal" class="score-val">1</span></div>
+        <div class="stat-box" style="font-size: 12px; opacity: 0.9;"><span>XP</span><span id="xpVal">0 / 100</span></div>
+        <div class="health-bar-container"><div id="xp-bar-fill"></div></div>
+        <div class="stat-box" style="margin-top: 6px;"><span>Can</span><span id="healthVal" class="health-val">100 / 100</span></div>
+        <div class="health-bar-container"><div id="health-bar-fill"></div></div>
+      </div>
+    </div>
+    <div id="inventory-bar">
+      <div class="glass-panel inv-slot"><span class="slot-icon" title="Odun">🪵</span><span class="slot-count" id="inv-wood">0</span></div>
+      <div class="glass-panel inv-slot"><span class="slot-icon" title="Saman">🌾</span><span class="slot-count" id="inv-straw">0</span></div>
+    </div>
+  </div>
+
+  <div id="gameOverScreen" class="glass-panel game-over">
+    <h2>ÖLDÜN</h2>
+    <p>Nihai Skorun: <span id="finalScore" class="score-val">0</span></p>
+    <button class="restart-btn" onclick="resetGame()">YENİDEN BAŞLA</button>
+  </div>
+
+  <!-- THREE.JS WEBGL KÜTÜPHANESİ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    const WORLD_SIZE = 3000;
+    const TILE_SIZE = 50;
+    const MAP_COLS = Math.floor(WORLD_SIZE / TILE_SIZE);
+    const MAP_ROWS = Math.floor(WORLD_SIZE / TILE_SIZE);
+
+    // DOM ELEMENTS
+    const levelEl = document.getElementById('levelVal');
+    const xpEl = document.getElementById('xpVal');
+    const xpBarFill = document.getElementById('xp-bar-fill');
+    const healthEl = document.getElementById('healthVal');
+    const healthBarFill = document.getElementById('health-bar-fill');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScoreEl = document.getElementById('finalScore');
+    const invWoodEl = document.getElementById('inv-wood');
+    const invStrawEl = document.getElementById('inv-straw');
+    const floatContainer = document.getElementById('floating-text-container');
+
+    // THREE JS SETUP
+    const canvas = document.getElementById('gameCanvas');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#87CEEB'); // Gökyüzü mavisi
+    scene.fog = new THREE.Fog('#87CEEB', 500, 2000);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 5000);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // AYDINLATMA
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(-1000, 2000, 1000);
+    dirLight.castShadow = true;
+    dirLight.shadow.camera.left = -2000;
+    dirLight.shadow.camera.right = 2000;
+    dirLight.shadow.camera.top = 2000;
+    dirLight.shadow.camera.bottom = -2000;
+    dirLight.shadow.camera.far = 5000;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    scene.add(dirLight);
+
+    // KONTROLLER
+    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+    window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+    window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+
+    let cameraZoom = 1.0;
+    window.addEventListener('wheel', e => {
+      if(e.target === canvas || e.target === floatContainer || e.target.closest('#ui-layer')) {
+        if (e.deltaY < 0) cameraZoom *= 1.1; else cameraZoom /= 1.1;
+        cameraZoom = Math.max(0.4, Math.min(cameraZoom, 2.5));
+      }
+    });
+
+    // 3D ZEMİN YAKALAYICI (Raycasting için sanal düzlem)
+    const floorPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(WORLD_SIZE * 2, WORLD_SIZE * 2),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    floorPlane.rotation.x = -Math.PI / 2;
+    scene.add(floorPlane);
+
+    const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+    const rand = (min, max) => Math.random() * (max - min) + min;
+
+    // MATERYALLER
+    const matGrass = new THREE.MeshLambertMaterial({color: '#4ade80'});
+    const matWater = new THREE.MeshLambertMaterial({color: '#3b82f6', transparent: true, opacity: 0.8});
+    const matSand = new THREE.MeshLambertMaterial({color: '#fde047'});
+    const matTree = new THREE.MeshLambertMaterial({color: '#064e3b'});
+
+    let dummies=[], projectiles=[], gems=[], groundItems=[], floatingTexts=[], particles=[];
+    let mapMeshes = [];
+    let player;
+    let isGameOver = false;
+    let score = 0;
+
+    class FloatingText {
+      constructor(x, y, z, text, color) {
+        this.pos = new THREE.Vector3(x, y, z);
+        this.life = 1.0;
+        this.element = document.createElement('div');
+        this.element.className = 'float-text';
+        this.element.innerText = text;
+        this.element.style.color = color;
+        this.element.style.fontSize = '14px'; // Yazılar daha ufak ve minimal hale getirildi
+        floatContainer.appendChild(this.element);
+      }
+      update(dt) {
+        this.pos.y += 30 * dt;
+        this.life -= dt * 1.5;
+        
+        let vec = this.pos.clone();
+        vec.project(camera);
+        let px = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        let py = (-(vec.y * 0.5) + 0.5) * window.innerHeight;
+        
+        this.element.style.left = `${px}px`;
+        this.element.style.top = `${py}px`;
+        this.element.style.opacity = Math.max(0, this.life);
+      }
+      destroy() {
+        if(this.element.parentNode) this.element.parentNode.removeChild(this.element);
+      }
+    }
+
+    class Particle {
+      constructor(x, y, z, color) {
+        this.mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshBasicMaterial({color: color}));
+        this.mesh.position.set(x, y, z);
+        scene.add(this.mesh);
+        
+        const angle = rand(0, Math.PI*2);
+        const speed = rand(30, 80);
+        this.vx = Math.cos(angle) * speed;
+        this.vz = Math.sin(angle) * speed;
+        this.vy = rand(30, 80);
+        this.life = 1.0;
+      }
+      update(dt) {
+        this.mesh.position.x += this.vx * dt;
+        this.mesh.position.z += this.vz * dt;
+        this.mesh.position.y += this.vy * dt;
+        this.vy -= 150 * dt; // Gravity
+        if(this.mesh.position.y < 0) this.mesh.position.y = 0;
+        
+        this.life -= dt;
+        this.mesh.scale.setScalar(Math.max(0, this.life));
+      }
+    }
+
+    function createExplosion(x, y, z, color, count) {
+      for(let i=0; i<count; i++) particles.push(new Particle(x, y, z, color));
+    }
+
+    class Player {
+      constructor() {
+        this.x = WORLD_SIZE/2; this.z = WORLD_SIZE/2;
+        this.speed = 300; this.radius = 20;
+        this.maxHealth = 100; this.health = 100;
+        this.level = 1; this.xp = 0; this.xpNeeded = 100;
+        this.inventory = { wood:0, straw:0 };
+        this.walkTimer = 0;
+
+        this.mesh = new THREE.Group();
+        this.mesh.position.set(this.x, 0, this.z);
+
+        // Body
+        this.body = new THREE.Mesh(new THREE.BoxGeometry(20, 30, 20), new THREE.MeshLambertMaterial({color: '#1d4ed8'}));
+        this.body.position.y = 15;
+        this.body.castShadow = true;
+        this.mesh.add(this.body);
+
+        // Head
+        this.head = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 16), new THREE.MeshLambertMaterial({color: '#fde047'}));
+        this.head.position.y = 38;
+        this.head.castShadow = true;
+        this.mesh.add(this.head);
+
+        // Staff
+        this.staff = new THREE.Mesh(new THREE.BoxGeometry(4, 40, 4), new THREE.MeshLambertMaterial({color: '#78350f'}));
+        this.staff.position.set(15, 20, 10);
+        this.staff.rotation.x = Math.PI/4;
+        this.staff.castShadow = true;
+        this.mesh.add(this.staff);
+
+        // FEET (Ayaklar)
+        const footGeo = new THREE.BoxGeometry(8, 6, 12);
+        const footMat = new THREE.MeshLambertMaterial({color: '#0f172a'}); // Koyu mavi/siyah ayakkabı
+
+        this.leftFoot = new THREE.Mesh(footGeo, footMat);
+        this.leftFoot.position.set(-6, 3, 0);
+        this.leftFoot.castShadow = true;
+        this.mesh.add(this.leftFoot);
+
+        this.rightFoot = new THREE.Mesh(footGeo, footMat);
+        this.rightFoot.position.set(6, 3, 0);
+        this.rightFoot.castShadow = true;
+        this.mesh.add(this.rightFoot);
+
+        scene.add(this.mesh);
+      }
+      update(dt) {
+        let dx=0, dz=0;
+        // Kamera çapraz durduğu için, tuşları izometrik eksene göre eşliyoruz:
+        if(keys.w || keys.ArrowUp)   { dx += 1; dz -= 1; } // Ekranda Yukarı
+        if(keys.s || keys.ArrowDown) { dx -= 1; dz += 1; } // Ekranda Aşağı
+        if(keys.a || keys.ArrowLeft) { dx -= 1; dz -= 1; } // Ekranda Sola
+        if(keys.d || keys.ArrowRight){ dx += 1; dz += 1; } // Ekranda Sağa
+
+        if (dx !== 0 || dz !== 0) {
+          let length = Math.hypot(dx, dz);
+          this.x += (dx/length) * this.speed * dt;
+          this.z += (dz/length) * this.speed * dt;
+          this.walkTimer += dt * 15;
+          // Bobbing (Sekme ve Adım Atma)
+          let bob = Math.abs(Math.sin(this.walkTimer)) * 4;
+          this.body.position.y = 15 + bob;
+          this.head.position.y = 38 + bob;
+          this.staff.position.y = 20 + bob;
+
+          // Ayak Salınımı
+          let swing = Math.sin(this.walkTimer) * 12;
+          this.leftFoot.position.z = swing;
+          this.rightFoot.position.z = -swing;
+        } else {
+          // Durduğunda zamanlayıcıyı sönümle ve ayakları ortala
+          this.walkTimer *= 0.8;
+          let bob = Math.abs(Math.sin(this.walkTimer)) * 4;
+          this.body.position.y = 15 + bob;
+          this.head.position.y = 38 + bob;
+          this.staff.position.y = 20 + bob;
+
+          let swing = Math.sin(this.walkTimer) * 12;
+          this.leftFoot.position.z = swing;
+          this.rightFoot.position.z = -swing;
+        }
+
+        this.x = Math.max(this.radius, Math.min(WORLD_SIZE-this.radius, this.x));
+        this.z = Math.max(this.radius, Math.min(WORLD_SIZE-this.radius, this.z));
+        this.mesh.position.set(this.x, 0, this.z);
+      }
+      lookAtPos(x, z) {
+        this.mesh.rotation.y = Math.atan2(this.x - x, this.z - z);
+      }
+      addXp(amount) {
+        this.xp += amount;
+        while(this.xp >= this.xpNeeded) {
+          this.xp -= this.xpNeeded;
+          this.level++;
+          this.maxHealth += 20;
+          this.health = this.maxHealth;
+          this.xpNeeded = Math.floor(this.xpNeeded * 1.5);
+          floatingTexts.push(new FloatingText(this.x, 60, this.z, "SEVİYE ATLADI!", '#fbbf24'));
+        }
+      }
+    }
+
+    class Projectile {
+      constructor(x, z, targetX, targetZ) {
+        this.x = x; this.z = z; this.radius = 8;
+        this.mesh = new THREE.Mesh(new THREE.SphereGeometry(6, 8, 8), new THREE.MeshBasicMaterial({color: '#a855f7'}));
+        this.mesh.position.set(x, 20, z);
+        scene.add(this.mesh);
+
+        let angle = Math.atan2(targetZ - z, targetX - x);
+        this.vx = Math.cos(angle) * 500;
+        this.vz = Math.sin(angle) * 500;
+        this.life = 2.0;
+        this.active = true;
+        this.damage = Math.floor(rand(500, 1500));
+      }
+      update(dt) {
+        this.x += this.vx * dt;
+        this.z += this.vz * dt;
+        this.mesh.position.set(this.x, 20, this.z);
+        this.life -= dt;
+        if(this.life <= 0) this.active = false;
+      }
+      destroy() { scene.remove(this.mesh); }
+    }
+
+    class Dummy {
+      constructor(x, z) {
+        this.x = x; this.z = z; this.radius = 25;
+        this.maxHealth = 10000; this.health = 10000;
+
+        this.mesh = new THREE.Group();
+        this.mesh.position.set(x, 0, z);
+
+        // Stick
+        const stick = new THREE.Mesh(new THREE.BoxGeometry(8, 40, 8), new THREE.MeshLambertMaterial({color: '#78350f'}));
+        stick.position.y = 20; stick.castShadow = true;
+        this.mesh.add(stick);
+
+        // Body
+        this.body = new THREE.Mesh(new THREE.BoxGeometry(30, 20, 20), new THREE.MeshLambertMaterial({color: '#fde047'}));
+        this.body.position.y = 30; this.body.castShadow = true;
+        this.mesh.add(this.body);
+
+        // Head
+        this.head = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 16), new THREE.MeshLambertMaterial({color: '#fef08a'}));
+        this.head.position.y = 48; this.head.castShadow = true;
+        this.mesh.add(this.head);
+
+        scene.add(this.mesh);
+        
+        // Health Bar UI element
+        this.hpUI = document.createElement('div');
+        this.hpUI.style.position = 'absolute';
+        this.hpUI.style.width = '40px'; this.hpUI.style.height = '6px';
+        this.hpUI.style.background = 'black';
+        this.hpUI.style.border = '1px solid white';
+        this.hpFill = document.createElement('div');
+        this.hpFill.style.width = '100%'; this.hpFill.style.height = '100%';
+        this.hpFill.style.background = '#10b981';
+        this.hpUI.appendChild(this.hpFill);
+        floatContainer.appendChild(this.hpUI);
+      }
+      update(dt) {
+        if(this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + 200 * dt);
+        
+        this.hpFill.style.width = `${(this.health / this.maxHealth)*100}%`;
+        let vec = new THREE.Vector3(this.x, 70, this.z).project(camera);
+        let px = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        let py = (-(vec.y * 0.5) + 0.5) * window.innerHeight;
+        this.hpUI.style.left = `${px - 20}px`;
+        this.hpUI.style.top = `${py}px`;
+      }
+      takeDamage(amount) {
+        this.health = Math.max(0, this.health - amount);
+        floatingTexts.push(new FloatingText(this.x + rand(-10,10), 40, this.z + rand(-10,10), "-" + Math.floor(amount), '#ef4444'));
+        
+        let mat = this.body.material;
+        mat.emissive.setHex(0xffffff);
+        setTimeout(() => mat.emissive.setHex(0x000000), 100);
+
+        if(Math.random() < 0.25) groundItems.push(new GroundItem(this.x + rand(-30,30), this.z + rand(-30,30), 'wood'));
+        if(Math.random() < 0.25) groundItems.push(new GroundItem(this.x + rand(-30,30), this.z + rand(-30,30), 'straw'));
+      }
+      destroy() {
+        scene.remove(this.mesh);
+        if(this.hpUI.parentNode) this.hpUI.parentNode.removeChild(this.hpUI);
+      }
+    }
+
+    class Gem {
+      constructor(x, z) {
+        this.x = x; this.z = z; this.radius = 15;
+        this.mesh = new THREE.Mesh(new THREE.OctahedronGeometry(8), new THREE.MeshLambertMaterial({color: '#b500ff', emissive: '#5a0080'}));
+        this.mesh.position.set(x, 10, z);
+        this.mesh.castShadow = true;
+        scene.add(this.mesh);
+        this.timeOffset = rand(0, 10);
+      }
+      update(dt, t) {
+        this.mesh.rotation.y += dt;
+        this.mesh.position.y = 10 + Math.sin(t + this.timeOffset) * 5;
+      }
+      destroy() { scene.remove(this.mesh); }
+    }
+
+    class GroundItem {
+      constructor(x, z, type) {
+        this.x = x; this.z = z; this.type = type; this.radius = 15;
+        let color = type === 'wood' ? '#78350f' : '#fde047';
+        this.mesh = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), new THREE.MeshLambertMaterial({color: color}));
+        this.mesh.position.set(x, 5, z);
+        this.mesh.castShadow = true;
+        scene.add(this.mesh);
+        this.timeOffset = rand(0, 10);
+      }
+      update(dt, t) {
+        this.mesh.rotation.y -= dt;
+        this.mesh.rotation.x += dt;
+        this.mesh.position.y = 10 + Math.sin(t + this.timeOffset) * 3;
+      }
+      destroy() { scene.remove(this.mesh); }
+    }
+
+    function initMap() {
+      mapMeshes.forEach(m => scene.remove(m));
+      mapMeshes = [];
+      gems.forEach(g => g.destroy()); gems = [];
+      groundItems.forEach(i => i.destroy()); groundItems = [];
+      dummies.forEach(d => d.destroy()); dummies = [];
+      projectiles.forEach(p => p.destroy()); projectiles = [];
+      floatingTexts.forEach(f => f.destroy()); floatingTexts = [];
+      particles.forEach(p => scene.remove(p.mesh)); particles = [];
+
+      let gCnt=0, wCnt=0, sCnt=0, tCnt=0;
+      let gridData = [];
+      for(let r=0; r<MAP_ROWS; r++) {
+        for(let c=0; c<MAP_COLS; c++) {
+          let noise = (Math.sin(c*0.15) + Math.sin(r*0.15) + Math.sin((c+r)*0.07)) / 3;
+          let type = 0;
+          if(noise < -0.3) { type = 1; wCnt++; }
+          else if(noise < -0.2) { type = 2; sCnt++; }
+          else if(noise > 0.4) { type = 3; tCnt++; }
+          else { type = 0; gCnt++; }
+          gridData.push({r, c, type});
+        }
+      }
+
+      let grassInst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE, TILE_SIZE), matGrass, gCnt);
+      let waterInst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE-10, TILE_SIZE), matWater, wCnt);
+      let sandInst  = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE, TILE_SIZE), matSand, sCnt);
+      let treeInst  = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE*3, TILE_SIZE), matTree, tCnt);
+      
+      grassInst.receiveShadow = true; sandInst.receiveShadow = true; 
+      treeInst.castShadow = true; treeInst.receiveShadow = true;
+
+      let ig=0, iw=0, is=0, it=0;
+      let dummyMatrix = new THREE.Object3D();
+
+      gridData.forEach(cell => {
+         let px = cell.c * TILE_SIZE + TILE_SIZE/2;
+         let pz = cell.r * TILE_SIZE + TILE_SIZE/2;
+         
+         if(cell.type === 0) {
+            dummyMatrix.position.set(px, -TILE_SIZE/2, pz);
+            dummyMatrix.updateMatrix();
+            grassInst.setMatrixAt(ig++, dummyMatrix.matrix);
+         } else if(cell.type === 1) {
+            dummyMatrix.position.set(px, -TILE_SIZE/2 - 5, pz);
+            dummyMatrix.updateMatrix();
+            waterInst.setMatrixAt(iw++, dummyMatrix.matrix);
+         } else if(cell.type === 2) {
+            dummyMatrix.position.set(px, -TILE_SIZE/2, pz);
+            dummyMatrix.updateMatrix();
+            sandInst.setMatrixAt(is++, dummyMatrix.matrix);
+         } else if(cell.type === 3) {
+            dummyMatrix.position.set(px, TILE_SIZE/2, pz);
+            dummyMatrix.updateMatrix();
+            treeInst.setMatrixAt(it++, dummyMatrix.matrix);
+         }
+      });
+
+      scene.add(grassInst); scene.add(waterInst); scene.add(sandInst); scene.add(treeInst);
+      mapMeshes.push(grassInst, waterInst, sandInst, treeInst);
+
+      dummies.push(new Dummy(WORLD_SIZE/2 + 250, WORLD_SIZE/2));
+      
+      for(let i=0; i<100; i++) {
+         let gx = rand(100, WORLD_SIZE-100);
+         let gz = rand(100, WORLD_SIZE-100);
+         gems.push(new Gem(gx, gz));
+      }
+    }
+
+    function resetGame() {
+      if(player && player.mesh) scene.remove(player.mesh);
+      player = new Player();
+      initMap();
+      score = 0; isGameOver = false;
+      gameOverScreen.style.display = 'none';
+      updateUI();
+    }
+
+    function updateUI() {
+      levelEl.innerText = player.level;
+      xpEl.innerText = `${Math.floor(player.xp)} / ${player.xpNeeded}`;
+      xpBarFill.style.width = `${(player.xp / player.xpNeeded) * 100}%`;
+      healthEl.innerText = `${Math.ceil(player.health)} / ${player.maxHealth}`;
+      healthBarFill.style.width = `${(player.health / player.maxHealth) * 100}%`;
+      invWoodEl.innerText = player.inventory.wood;
+      invStrawEl.innerText = player.inventory.straw;
+    }
+
+    function endGame() {
+      isGameOver = true;
+      finalScoreEl.innerText = score;
+      gameOverScreen.style.display = 'flex';
+    }
+
+    window.addEventListener('mousedown', (e) => {
+      if(isGameOver) return;
+      
+      let nearestDist = Infinity, nearest = null;
+      dummies.forEach(d => {
+         let curr = dist(player.x, player.z, d.x, d.z);
+         if(curr < nearestDist) { nearestDist = curr; nearest = d; }
+      });
+      
+      if(nearest) {
+         player.lookAtPos(nearest.x, nearest.z);
+         projectiles.push(new Projectile(player.x, player.z, nearest.x, nearest.z));
+      } else {
+         const mouseVec = new THREE.Vector2((e.clientX / window.innerWidth)*2-1, -(e.clientY / window.innerHeight)*2+1);
+         const raycaster = new THREE.Raycaster();
+         raycaster.setFromCamera(mouseVec, camera);
+         const intersects = raycaster.intersectObject(floorPlane);
+         if(intersects.length > 0) {
+            let pnt = intersects[0].point;
+            player.lookAtPos(pnt.x, pnt.z);
+            projectiles.push(new Projectile(player.x, player.z, pnt.x, pnt.z));
+         }
+      }
+      player.walkTimer += 1.5;
+    });
+
+    let prevTime = performance.now();
+    function loop() {
+      requestAnimationFrame(loop);
+      const time = performance.now();
+      const dt = Math.min((time - prevTime) / 1000, 0.1);
+      prevTime = time;
+
+      if(isGameOver) return;
+
+      player.update(dt);
+
+      const camDst = 600 / cameraZoom;
+      camera.position.set(player.x - camDst*0.7, camDst, player.z + camDst*0.7);
+      camera.lookAt(player.x, 0, player.z);
+
+      gems.forEach((g, i) => {
+         g.update(dt, time*0.003);
+         if(dist(player.x, player.z, g.x, g.z) < player.radius + g.radius) {
+            createExplosion(g.x, 15, g.z, '#b500ff', 10);
+            player.addXp(25);
+            gems.push(new Gem(rand(100, WORLD_SIZE-100), rand(100, WORLD_SIZE-100)));
+            g.destroy(); gems.splice(i, 1);
+            updateUI();
+         }
+      });
+
+      groundItems.forEach((gi, i) => {
+         gi.update(dt, time*0.005);
+         if(dist(player.x, player.z, gi.x, gi.z) < player.radius + gi.radius) {
+            player.inventory[gi.type]++;
+            floatingTexts.push(new FloatingText(player.x, 60, player.z, "+1", '#10b981'));
+            createExplosion(gi.x, 10, gi.z, gi.type === 'wood'?'#78350f':'#fde047', 5);
+            gi.destroy(); groundItems.splice(i, 1);
+            updateUI();
+         }
+      });
+
+      projectiles.forEach((p, i) => {
+         p.update(dt);
+         dummies.forEach(d => {
+            if(p.active && dist(p.x, p.z, d.x, d.z) < p.radius + d.radius) {
+               p.active = false;
+               d.takeDamage(p.damage);
+               createExplosion(p.x, 20, p.z, '#b500ff', 10);
+            }
+         });
+         if(!p.active) { p.destroy(); projectiles.splice(i, 1); }
+      });
+
+      dummies.forEach(d => d.update(dt));
+      floatingTexts.forEach((ft, i) => { ft.update(dt); if(ft.life <= 0) { ft.destroy(); floatingTexts.splice(i,1); }});
+      particles.forEach((p, i) => { p.update(dt); if(p.life <= 0) { scene.remove(p.mesh); particles.splice(i,1); }});
+
+      renderer.render(scene, camera);
+    }
+
+    resetGame();
+    loop();
+  </script>
+</body>
+</html>
